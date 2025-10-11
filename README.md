@@ -22,3 +22,7 @@ It uses Mediapipe for pose detection, XGBoost for machine learning predictions, 
 - XGBoost
 - FastAPI
 - Uvicorn (server)
+
+python server.py
+cd frontend
+npx expo start
