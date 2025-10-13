@@ -2,39 +2,66 @@ import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ImageBackground } from "react-native";
 import { FontAwesome5 } from '@expo/vector-icons'; // Assuming you have Expo Vector Icons
 
+/**
+ * Converts a score from the 0.0-1.0 scale (from backend) to a 1-5 point scale (for display).
+ * 1.0 -> 5
+ * 0.5 -> 3
+ * 0.0 -> 1
+ */
+const convertScoreTo5Point = (score) => {
+    // Formula: (score_0_to_1 * 4) + 1, rounded to nearest integer
+    const convertedScore = Math.round((score * 4) + 1);
+    // Ensure the score stays within the 1-5 boundary
+    return Math.min(5, Math.max(1, convertedScore));
+};
+
 export default function RecommendationScreen({ route, navigation }) {
-  // *** THE FIX: Get the analysis result, not just the workout name ***
+  // Get the analysis result
   const { analysisResult } = route.params; 
   
   // Use a default structure if the result is somehow missing or malformed
   const defaultResult = { workout: "Unknown", reps: 0, avg_score: 0, details: [] };
   const { workout, reps, avg_score, details } = analysisResult || defaultResult;
   
-  // Check if we have a workout name, otherwise use the default.
   const workoutName = workout?.name || workout;
-  
-  const scorePercent = Math.round(avg_score * 100);
+
+  // --- NEW: Convert the 0.0-1.0 average score to 1-5 ---
+  const score5Point = convertScoreTo5Point(avg_score);
   
   let feedbackMessage;
   let scoreColor;
 
-  if (scorePercent >= 90) {
-    feedbackMessage = "Exceptional Form! You nailed the technique.";
+  if (score5Point === 5) {
+    feedbackMessage = "Exceptional Form! You earned a perfect 5.";
     scoreColor = "#4CAF50"; // Green
-  } else if (scorePercent >= 75) {
-    feedbackMessage = "Great job! A few minor points to refine.";
+  } else if (score5Point === 4) {
+    feedbackMessage = "Excellent job! Minor refinements needed for perfection.";
+    scoreColor = "#8BC34A"; // Light Green
+  } else if (score5Point === 3) {
+    feedbackMessage = "Good performance. Focus on key issues for improvement.";
     scoreColor = "#FFC107"; // Yellow
+  } else if (score5Point === 2) {
+    feedbackMessage = "Needs work. Review the form guide before your next session.";
+    scoreColor = "#FF9800"; // Orange
   } else {
-    feedbackMessage = "Good start! Focus on the key issues for improvement.";
+    feedbackMessage = "Critical issues detected. Stop and review the technique immediately.";
     scoreColor = "#F44336"; // Red
   }
 
   // Generate a simple list of performance details from the 'details' array
-  const repDetails = (details || []).map((score, index) => ({
-    rep: index + 1,
-    score: score,
-    repColor: score >= 0.9 ? "#4CAF50" : (score >= 0.7 ? "#FFC107" : "#F44336"),
-  }));
+  const repDetails = (details || []).map((rawScore, index) => {
+    const repScore5Point = convertScoreTo5Point(rawScore);
+    let repColor;
+    if (repScore5Point >= 4) repColor = "#4CAF50";
+    else if (repScore5Point >= 3) repColor = "#FFC107";
+    else repColor = "#F44336";
+
+    return {
+      rep: index + 1,
+      score: repScore5Point, // Store the 1-5 score for display
+      repColor: repColor,
+    };
+  });
 
   return (
     <ImageBackground
@@ -48,7 +75,7 @@ export default function RecommendationScreen({ route, navigation }) {
 
             {/* Overall Score */}
             <View style={[styles.scoreCircle, { borderColor: scoreColor }]}>
-                <Text style={[styles.scoreText, {color: scoreColor}]}>{scorePercent}%</Text>
+                <Text style={[styles.scoreText, {color: scoreColor}]}>{score5Point}/5</Text>
             </View>
             <Text style={[styles.feedback, { color: scoreColor }]}>{feedbackMessage}</Text>
 
@@ -59,8 +86,8 @@ export default function RecommendationScreen({ route, navigation }) {
                     <Text style={styles.statLabel}>Reps Tracked</Text>
                 </View>
                 <View style={styles.statBox}>
-                    <FontAwesome5 name="chart-line" size={24} color="#00CFFF" />
-                    <Text style={styles.statNumber}>{scorePercent}%</Text>
+                    <FontAwesome5 name="star" size={24} color="#00CFFF" />
+                    <Text style={styles.statNumber}>{score5Point}/5</Text>
                     <Text style={styles.statLabel}>Avg Form Score</Text>
                 </View>
             </View>
@@ -72,7 +99,7 @@ export default function RecommendationScreen({ route, navigation }) {
                     repDetails.map((item) => (
                         <View key={item.rep} style={styles.repPill}>
                             <Text style={styles.repText}>Rep {item.rep}: </Text>
-                            <Text style={[styles.repScore, { color: item.repColor }]}>{Math.round(item.score * 100)}%</Text>
+                            <Text style={[styles.repScore, { color: item.repColor }]}>{item.score}/5</Text>
                         </View>
                     ))
                 ) : (
@@ -119,7 +146,6 @@ const styles = StyleSheet.create({
   scoreText: {
     fontSize: 40,
     fontWeight: 'bold',
-    // Removed fixed white color so it picks up the dynamic scoreColor
   },
   feedback: {
     fontSize: 18,
