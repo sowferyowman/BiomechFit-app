@@ -1,0 +1,59 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+app-example
+# --- Python Backend Additions ---
+# This is the big one! It ignores the 10,000+ library files
+biomechfit-env/
+venv/
+env/
+
+# Ignores compiled python script "cache"
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignores large model files (if you want to keep the repo light)
+*.pkl
+
+# Ignores local environment variables
+.env
+# generated native folders
+/ios
+/android
