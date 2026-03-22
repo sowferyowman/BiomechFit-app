@@ -1,9 +1,9 @@
-# Web Framework
-Flask==3.1.3
-Flask-Cors==5.0.0
-
-# Computer Vision & ML
-opencv-python-headless==4.11.0.86
-numpy==2.2.6
-mediapipe==0.10.33
-xgboost==3.2.0
+# Use 'headless' to skip GUI libraries
+opencv-python-headless==4.11.0.86 
+# Use a specific version of MediaPipe known to be smaller
+mediapipe==0.10.11
+# Use a lighter version of XGBoost if possible
+xgboost==2.0.3
+Flask==3.0.3
+Flask-Cors==4.0.1
+numpy==1.26.4
