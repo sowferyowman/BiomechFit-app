@@ -1,5 +1,10 @@
 {
   "version": 2,
+  "functions": {
+    "backend/server.py": {
+      "excludeFiles": "biomechfit-env/**"
+    }
+  },
   "builds": [
     {
       "src": "backend/server.py",
@@ -7,13 +12,6 @@
     }
   ],
   "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "backend/server.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "backend/server.py"
-    }
+    { "src": "/api/(.*)", "dest": "backend/server.py" }
   ]
 }
