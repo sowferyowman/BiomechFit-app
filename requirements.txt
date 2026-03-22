@@ -1,0 +1,6 @@
+Flask==3.0.0
+Flask-Cors==4.0.0
+opencv-python-headless==4.8.1.78
+numpy==1.26.2
+mediapipe==0.10.9
+xgboost==2.0.2
