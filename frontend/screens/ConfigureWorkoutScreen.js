@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Picker } from "@react-native-picker/picker";
 import {
   View,
   Text,
@@ -8,176 +9,348 @@ import {
   ImageBackground,
   ScrollView,
   Alert,
-  ActivityIndicator, // Import ActivityIndicator for loading state
+  ActivityIndicator,
+  Platform,
+  StatusBar,
+  Pressable,
+  useWindowDimensions,
 } from "react-native";
 import axios from "axios";
 
 export default function ConfigureWorkoutScreen({ route, navigation }) {
   const { workout } = route.params;
+  const { width: windowWidth } = useWindowDimensions();
+  const isTablet = windowWidth >= 768;
 
+  // === MAX WEIGHT LIMITS (Logic preserved) ===
+  const exerciseMaxLoad = {
+    "Squat": 150,
+    "Bench Press": 101,
+    "Overhead Press": 70,
+  };
+
+  const showError = (title, message) => {
+    if (Platform.OS === "web") {
+      alert(`${title}\n\n${message}`);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
+
+  const maxLoadAllowed = exerciseMaxLoad[workout.name] || 200;
+
+  // USER INPUT STATES
   const [age, setAge] = useState("");
   const [sex, setSex] = useState("");
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
-  const [experience, setExperience] = useState("");
   const [load, setLoad] = useState("");
   const [sets, setSets] = useState("");
   const [reps, setReps] = useState("");
-  const [isLoading, setIsLoading] = useState(false); // New state for loading
+  const [isLoading, setIsLoading] = useState(false);
+
+  // ERROR STATES
+  const [ageError, setAgeError] = useState("");
+  const [heightError, setHeightError] = useState("");
+  const [setsError, setSetsError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [repsError, setRepsError] = useState("");
+  const [weightError, setWeightError] = useState("");
+
+  // === INPUT HANDLERS (LOGIC UNCHANGED) ===
+  const handleAgeChange = (value) => {
+    const numeric = value.replace(/[^0-9]/g, "");
+    const num = parseInt(numeric, 10);
+    if (!numeric) { setAge(""); setAgeError(""); } 
+    else if (!isNaN(num) && num >= 15 && num <= 70) { setAge(numeric); setAgeError(""); } 
+    else { setAge(numeric); setAgeError("Age must be 15-70."); }
+  };
+
+  const handleHeightChange = (value) => {
+    const numeric = value.replace(/[^0-9]/g, "");
+    const num = parseInt(numeric, 10);
+    if (!numeric) { setHeight(""); setHeightError(""); } 
+    else if (!isNaN(num) && num >= 100 && num <= 230) { setHeight(numeric); setHeightError(""); } 
+    else { setHeight(numeric); setHeightError("Height: 100-230cm."); }
+  };
+
+  const handleWeightChange = (value) => {
+    const numeric = value.replace(/[^0-9]/g, "");
+    const num = parseInt(numeric, 10);
+    if (!numeric) { setWeight(""); setWeightError(""); } 
+    else if (!isNaN(num) && num >= 18 && num <= 100) { setWeight(numeric); setWeightError(""); } 
+    else { setWeight(numeric); setWeightError("Weight: 18-100kg."); }
+  };
+
+  const handleSetsChange = (value) => {
+    const numeric = value.replace(/[^0-9]/g, "");
+    const num = parseInt(numeric, 10);
+    if (!numeric) { setSets(""); setSetsError(""); } 
+    else if (!isNaN(num) && num <= 5) { setSets(numeric); setSetsError(""); } 
+    else { setSets(numeric); setSetsError("Max 5 sets."); }
+  };
+
+  const handleRepsChange = (value) => {
+    const numericValue = value.replace(/[^0-9]/g, "");
+    const repsNumber = parseInt(numericValue, 10);
+    if (!numericValue) { setReps(""); setRepsError(""); } 
+    else if (!isNaN(repsNumber) && repsNumber >= 1 && repsNumber <= 12) { setReps(numericValue); setRepsError(""); } 
+    else { setReps(numericValue); setRepsError("Reps: 1-12."); }
+  };
+
+  const handleLoadChange = (value) => {
+    const numeric = value.replace(/[^0-9]/g, "");
+    const num = parseInt(numeric, 10);
+    if (!numeric) { setLoad(""); setLoadError(""); } 
+    else if (!isNaN(num) && num >= 5 && num <= maxLoadAllowed) { setLoad(numeric); setLoadError(""); } 
+    else { setLoad(numeric); setLoadError(`Range: 5-${maxLoadAllowed}kg`); }
+  };
 
   const handleStartExecution = async () => {
-    if (!age || !sex || !height || !weight || !experience || !reps || !sets) {
-      Alert.alert("Missing Info", "Please fill out all mandatory fields before starting.");
+    if (!age || !sex || !height || !weight || !reps || !sets) {
+      showError("Missing Info", "Please fill out all mandatory fields.");
+      return;
+    }
+    if (ageError || heightError || weightError || repsError || setsError || loadError) {
+      showError("Invalid Input", "Please fix errors before starting.");
       return;
     }
 
     setIsLoading(true);
-    // Crucial Alert: Tells the user to look at their desktop
-    Alert.alert("Analysis Started", "Check your desktop/laptop screen for the live video analysis window. DO NOT close the mobile app until the desktop analysis is complete.");
-
     try {
-        // This axios call BLOCKS until the Python server returns the final analysis result
-        const res = await axios.post("http://192.168.1.3:5000/analyze", {
+      const res = await axios.post("http://172.16.12.42:5000/analyze", {
         workout: workout.name,
-        user: { age, sex, height, weight, experience, load, sets, reps },
+        user: { age, sex, height, weight, load, sets, reps },
       });
-
-      console.log("Backend response:", res.data);
-      
-      // *** THE FIX: Pass the entire server response object to the Recommendation screen ***
       navigation.navigate("Recommendation", { analysisResult: res.data });
-
     } catch (error) {
-      console.error("Error executing analysis:", error);
-      Alert.alert("Connection Error", "Could not connect to the analysis server. Make sure the Python server is running and the IP address (192.168.1.3:5000) is correct.");
+      showError("Connection Error", "Could not connect to analysis server.");
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const experienceLevels = ["Beginner", "Intermediate", "Advanced"];
-
   return (
-    <ImageBackground
-      source={require("../assets/images/barbell.jpg")}
-      style={styles.background}
-    >
-      <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>CONFIGURE {workout.name.toUpperCase()}</Text>
+    <View style={styles.mainContainer}>
+      <ImageBackground source={require("../assets/images/barbell.jpg")} style={styles.bg} resizeMode="cover">
+        <View style={styles.overlay} />
+        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{workout.name}</Text>
-          <Text style={styles.cardDesc}>Fill in your details for personalized tracking.</Text>
-        </View>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          
+          {/* Back Navigation */}
+          <Pressable 
+            style={({ hovered }) => [styles.backBtn, hovered && { backgroundColor: 'rgba(255,255,255,0.1)' }]} 
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backBtnText}>←  BACK</Text>
+          </Pressable>
 
-        {/* User Stats */}
-        <Text style={styles.sectionTitle}>YOUR STATS</Text>
-        <TextInput style={styles.input} placeholder="Age" placeholderTextColor="#999" keyboardType="numeric" value={age} onChangeText={setAge} />
-        <TextInput style={styles.input} placeholder="Sex (Male/Female/Other)" placeholderTextColor="#999" value={sex} onChangeText={setSex} />
-        <TextInput style={styles.input} placeholder="Height (cm)" placeholderTextColor="#999" keyboardType="numeric" value={height} onChangeText={setHeight} />
-        <TextInput style={styles.input} placeholder="Weight (kg)" placeholderTextColor="#999" keyboardType="numeric" value={weight} onChangeText={setWeight} />
-        
-        <Text style={styles.sectionTitle}>EXPERIENCE LEVEL</Text>
-        <View style={styles.experienceRow}>
-          {experienceLevels.map((level) => (
-            <TouchableOpacity
-              key={level}
-              style={[
-                styles.experienceButton,
-                experience === level && styles.experienceButtonActive,
+          <View style={styles.header}>
+            <Text style={styles.title}>CONFIGURE{"\n"}{workout.name.toUpperCase()}</Text>
+            <View style={[styles.titleUnderline, { backgroundColor: workout.color || '#00CFFF' }]} />
+          </View>
+
+          <View style={[styles.mainCard, { borderColor: workout.color || '#00CFFF' }]}>
+            
+            {/* SECTION: BIOMETRICS */}
+            <Text style={styles.sectionLabel}>▸ BIOMETRICS</Text>
+            
+            <View style={styles.row}>
+              <View style={styles.inputWrap}>
+                <Text style={styles.fieldLabel}>Age (15-70)</Text>
+                <TextInput
+                  style={[styles.input, ageError && styles.inputError]}
+                  placeholder="--"
+                  keyboardType="numeric"
+                  value={age}
+                  onChangeText={handleAgeChange}
+                  maxLength={2}
+                  placeholderTextColor="rgba(255,255,255,0.2)"
+                />
+              </View>
+              
+              <View style={styles.inputWrap}>
+                <Text style={styles.fieldLabel}>Sex</Text>
+                <View style={styles.pickerContainer}>
+                  <Picker
+                    selectedValue={sex}
+                    onValueChange={(val) => setSex(val)}
+                    style={styles.picker}
+                    dropdownIconColor="#00CFFF"
+                  >
+                    <Picker.Item label="Select" value="" color="#999" />
+                    <Picker.Item label="Male" value="M" color="#000" />
+                    <Picker.Item label="Female" value="F" color="#000" />
+                  </Picker>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.row}>
+              <View style={styles.inputWrap}>
+                <Text style={styles.fieldLabel}>Height (100-230cm)</Text>
+                <TextInput
+                  style={[styles.input, heightError && styles.inputError]}
+                  placeholder="--"
+                  keyboardType="numeric"
+                  value={height}
+                  onChangeText={handleHeightChange}
+                  placeholderTextColor="rgba(255,255,255,0.2)"
+                />
+              </View>
+              <View style={styles.inputWrap}>
+                <Text style={styles.fieldLabel}>Weight (18-100kg)</Text>
+                <TextInput
+                  style={[styles.input, weightError && styles.inputError]}
+                  placeholder="--"
+                  keyboardType="numeric"
+                  value={weight}
+                  onChangeText={handleWeightChange}
+                  placeholderTextColor="rgba(255,255,255,0.2)"
+                />
+              </View>
+            </View>
+
+            {(ageError || heightError || weightError) ? (
+               <Text style={styles.miniError}>{ageError || heightError || weightError}</Text>
+            ) : null}
+
+            <View style={styles.divider} />
+
+            {/* SECTION: WORKOUT DATA */}
+            <Text style={styles.sectionLabel}>▸ WORKOUT DATA</Text>
+
+            <View style={styles.row}>
+              <View style={styles.inputWrap}>
+                <Text style={styles.fieldLabel}>Sets (Max 1 )</Text>
+                <TextInput
+                  style={[styles.input, setsError && styles.inputError]}
+                  placeholder="--"
+                  keyboardType="numeric"
+                  value={sets}
+                  onChangeText={handleSetsChange}
+                  placeholderTextColor="rgba(255,255,255,0.2)"
+                />
+              </View>
+              <View style={styles.inputWrap}>
+                <Text style={styles.fieldLabel}>Reps (1-12)</Text>
+                <TextInput
+                  style={[styles.input, repsError && styles.inputError]}
+                  placeholder="--"
+                  keyboardType="numeric"
+                  value={reps}
+                  onChangeText={handleRepsChange}
+                  placeholderTextColor="rgba(255,255,255,0.2)"
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputWrapFull}>
+                <Text style={styles.fieldLabel}>Weight Load (5 - {maxLoadAllowed}kg)</Text>
+                <TextInput
+                  style={[styles.input, loadError && styles.inputError]}
+                  placeholder="Enter Weight"
+                  keyboardType="numeric"
+                  value={load}
+                  onChangeText={handleLoadChange}
+                  placeholderTextColor="rgba(255,255,255,0.2)"
+                />
+                {loadError ? <Text style={styles.miniError}>{loadError}</Text> : null}
+            </View>
+
+            <Pressable
+              onPress={handleStartExecution}
+              disabled={isLoading}
+              style={({ pressed, hovered }) => [
+                styles.startButton,
+                { backgroundColor: workout.color || '#00CFFF' },
+                (pressed || isLoading) && { transform: [{ scale: 0.98 }], opacity: 0.8 },
               ]}
-              onPress={() => setExperience(level)}
             >
-              <Text style={[styles.experienceButtonText, experience === level && styles.experienceButtonTextActive]}>{level}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#000" />
+              ) : (
+                <Text style={styles.startButtonText}>START AI ANALYSIS</Text>
+              )}
+            </Pressable>
 
-        {/* Workout Parameters */}
-        <Text style={styles.sectionTitle}>WORKOUT PARAMETERS</Text>
-        <TextInput style={styles.input} placeholder="Target Reps (e.g., 8)" placeholderTextColor="#999" keyboardType="numeric" value={reps} onChangeText={setReps} />
-        <TextInput style={styles.input} placeholder="Target Sets (e.g., 3)" placeholderTextColor="#999" keyboardType="numeric" value={sets} onChangeText={setSets} />
-        <TextInput style={styles.input} placeholder="Load (Optional, e.g., 100kg)" placeholderTextColor="#999" keyboardType="numeric" value={load} onChangeText={setLoad} />
-
-
-        <TouchableOpacity
-          style={styles.startButton}
-          onPress={handleStartExecution}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-             <ActivityIndicator size="small" color="#000" />
-          ) : (
-            <Text style={styles.startButtonText}>START ANALYSIS</Text>
-          )}
-        </TouchableOpacity>
-        
-        {isLoading && <Text style={styles.loadingText}>Analyzing... (Check Desktop)</Text>}
-
-
-      </ScrollView>
-    </ImageBackground>
+            {isLoading && (
+              <Text style={styles.loadingText}>Running Biomechanical Audit... (Check Desktop)</Text>
+            )}
+          </View>
+        </ScrollView>
+      </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  background: { flex: 1, resizeMode: "cover" },
-  container: { flexGrow: 1, padding: 20, backgroundColor: "rgba(0,0,0,0.7)" },
-  title: { fontSize: 26, fontWeight: "bold", color: "#00CFFF", textAlign: "center", marginBottom: 25 },
-  card: {
-    backgroundColor: "rgba(20,20,20,0.9)",
-    borderRadius: 12,
-    padding: 20,
+  mainContainer: { flex: 1, backgroundColor: "#000" },
+  bg: { flex: 1, width: '100%', height: '100%' },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(4,4,10,0.88)" },
+  scrollContent: { paddingTop: 60, paddingBottom: 64, alignItems: 'center' },
+  
+  backBtn: { alignSelf: 'flex-start', marginLeft: 24, padding: 10, borderRadius: 8, marginBottom: 20 },
+  backBtnText: { color: 'rgba(255,255,255,0.5)', fontSize: 12, letterSpacing: 2, fontWeight: '700' },
+
+  header: { marginBottom: 30, width: "100%", maxWidth: 600, alignItems: 'center' },
+  title: { fontWeight: "900", color: "#FFFFFF", lineHeight: 40, fontSize: 32, textAlign: 'center' },
+  titleUnderline: { marginTop: 12, width: 40, height: 4, borderRadius: 2 },
+  
+  mainCard: {
+    width: '90%',
+    maxWidth: 600,
+    backgroundColor: "rgba(15,15,25,0.8)",
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#00CFFF",
-    marginBottom: 25,
+    padding: 24,
+    ...Platform.select({ web: { backdropFilter: 'blur(10px)' } }),
   },
-  cardTitle: { fontSize: 22, color: "#fff", fontWeight: "bold", textAlign: "center" },
-  cardDesc: { fontSize: 16, color: "#bbb", textAlign: "center", marginTop: 5 },
-  sectionTitle: { color: "#00CFFF", fontSize: 18, fontWeight: "600", marginVertical: 10 },
+
+  sectionLabel: { fontSize: 10, letterSpacing: 2, color: "rgba(255,255,255,0.3)", marginBottom: 20, fontWeight: '700' },
+  row: { flexDirection: 'row', gap: 12, marginBottom: 15 },
+  inputWrap: { flex: 1 },
+  inputWrapFull: { width: '100%', marginBottom: 15 },
+  fieldLabel: { color: '#fff', fontSize: 12, marginBottom: 8, fontWeight: '600', opacity: 0.8 },
+  
   input: {
-    backgroundColor: "rgba(34,34,34,0.9)",
+    backgroundColor: "rgba(255,255,255,0.05)",
     color: "#fff",
-    padding: 12,
-    marginBottom: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#333",
-    fontSize: 15,
-  },
-  experienceRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 20 },
-  experienceButton: {
-    flex: 1,
-    marginHorizontal: 4,
-    backgroundColor: "#222",
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#333",
-  },
-  experienceButtonActive: {
-    backgroundColor: "#00CFFF",
-    borderColor: "#00CFFF",
-    shadowColor: "#00CFFF",
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  experienceButtonText: { color: "#ccc", fontWeight: "600" },
-  experienceButtonTextActive: { color: "#000", fontWeight: "bold" },
-  startButton: {
-    backgroundColor: "#00CFFF",
-    paddingVertical: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     borderRadius: 12,
-    alignItems: "center",
-    marginTop: 30,
-    marginBottom: 10,
-    shadowColor: "#00CFFF",
-    shadowOpacity: 0.7,
-    shadowRadius: 15,
-    elevation: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    fontSize: 16,
   },
-  startButtonText: { color: "#000", fontSize: 18, fontWeight: "bold" },
-  loadingText: { color: "#00CFFF", textAlign: "center", fontSize: 16, fontWeight: "500" },
+  inputError: { borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.05)' },
+  
+  pickerContainer: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    height: 50,
+    justifyContent: 'center',
+    overflow: 'hidden'
+  },
+  picker: { color: "#fff", width: '100%', height: 50, backgroundColor: 'transparent' },
+  
+  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 20 },
+  
+  miniError: { color: '#ef4444', fontSize: 11, marginTop: -5, marginBottom: 10, fontWeight: '500' },
+
+  startButton: {
+    paddingVertical: 18,
+    borderRadius: 14,
+    alignItems: "center",
+    marginTop: 20,
+    shadowColor: "#00CFFF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+  },
+  startButtonText: { color: "#000", fontSize: 16, fontWeight: "900", letterSpacing: 1 },
+  loadingText: { color: "rgba(255,255,255,0.5)", textAlign: "center", fontSize: 12, marginTop: 15, fontWeight: '500' },
 });

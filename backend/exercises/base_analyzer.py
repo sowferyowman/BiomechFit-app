@@ -1,51 +1,111 @@
 import mediapipe as mp
 import numpy as np
 import os
+import time
+
 # Suppress TensorFlow/MediaPipe logs
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 
 class BaseAnalyzer:
     """
     Base class for all exercise analyzers.
-    Handles common setup for MediaPipe Pose detection.
+    Handles:
+      - Required joint visibility check
+      - 5-second countdown before reps start
     """
-    def __init__(self):
-        # MediaPipe utility to draw landmarks
+    def __init__(self, required_landmarks=None):
+        # MediaPipe setup
         self.mp_drawing = mp.solutions.drawing_utils
-        
-        # MediaPipe Pose components
         self.mp_pose = mp.solutions.pose
-        # Initialize Pose model once per analyzer instance
         self.pose = self.mp_pose.Pose(
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5
         )
-        
-        # Common state variables for rep counting and scoring
+
+        # Rep + score tracking
         self.rep_count = 0
-        self.stage = "start"  # Tracks the current phase (e.g., 'up', 'down')
-        self.current_rep_score = 1.0 # Tracks the lowest score achieved during the current rep (0.0 to 1.0)
+        self.stage = "start"
+        self.current_rep_score = 5.0
         self.form_issues = []
 
+        # Countdown system
+        self.required_landmarks = required_landmarks or []
+        self.ready = False               # All joints detected?
+        self.countdown_done = False      # Countdown finished?
+        self.countdown_start_time = None # When countdown begins
+        self.countdown_seconds = 3       # Countdown length
+
+    # ----------------------------------------------------
+    # Landmark helper
+    # ----------------------------------------------------
     def get_landmark_coords(self, landmarks, landmark_id):
-        """Helper to safely extract (x, y) coordinates from a landmark list."""
         lm = landmarks[landmark_id]
-        # Only return x, y coordinates for 2D angle calculation
         return [lm.x, lm.y]
 
-    def process_frame(self, landmarks):
+    # ----------------------------------------------------
+    # Check if ALL required joints are visible
+    # ----------------------------------------------------
+    def _all_joints_detected(self, landmarks):
+        try:
+            for lm_id in self.required_landmarks:
+                lm = landmarks[lm_id]
+                # Require 0.6 visibility or better
+                if lm.visibility < 0.6:
+                    return False
+            return True
+        except:
+            return False
+
+    # ----------------------------------------------------
+    # Handles the 5-second countdown
+    # ----------------------------------------------------
+    def _handle_start_countdown(self):
+        # Start countdown at first frame of full detection
+        if self.countdown_start_time is None:
+            self.countdown_start_time = time.time()
+            return f"Get Ready: {self.countdown_seconds}"
+
+        elapsed = int(time.time() - self.countdown_start_time)
+        remaining = self.countdown_seconds - elapsed
+
+        if remaining > 0:
+            return f"Get Ready: {remaining}"
+
+        # Countdown done
+        self.countdown_done = True
+        return "Start!"
+
+    # ----------------------------------------------------
+    # MUST be called at the start of every process_frame() in analyzers
+    # ----------------------------------------------------
+    def handle_readiness_and_countdown(self, landmarks):
         """
-        MANDATORY METHOD: Processes a single frame's landmarks to analyze form,
-        count reps, and detect issues.
-
-        Args:
-            landmarks: The list of detected MediaPipe landmarks.
-
         Returns:
-            A tuple: (score, issues, stage_changed)
-            - score (float): Form score for the current frame (0.0 to 1.0).
-            - issues (list[str]): List of detected form issues.
-            - stage_changed (str | None): "rep" if a rep was completed, or None.
+            (status_message, ready_flag)
+            - If ready_flag is False → exercise SHOULD NOT proceed to rep logic.
+            - If ready_flag is True → analyzer may continue with rep scoring/counting.
         """
-        # Subclasses MUST implement this method
-        raise NotImplementedError("Subclasses must implement the process_frame method.")
+
+        # 1. Check if all required joints are visible
+        joints_ok = self._all_joints_detected(landmarks)
+
+        if not joints_ok:
+            # Reset countdown
+            self.countdown_start_time = None
+            self.countdown_done = False
+            return "Waiting for full joint visibility...", False
+
+        # 2. If countdown not done → run countdown
+        if not self.countdown_done:
+            msg = self._handle_start_countdown()
+            return msg, False
+
+        # 3. Ready for reps!
+        return "Start!", True
+
+    # ----------------------------------------------------
+    # Subclasses override this
+    # ----------------------------------------------------
+    def process_frame(self, landmarks):
+        raise NotImplementedError("Subclasses must implement process_frame().")

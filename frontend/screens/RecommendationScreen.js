@@ -1,221 +1,173 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ImageBackground } from "react-native";
-import { FontAwesome5 } from '@expo/vector-icons'; // Assuming you have Expo Vector Icons
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ImageBackground, Dimensions, Platform } from "react-native";
+import { FontAwesome5 } from '@expo/vector-icons';
 
-/**
- * Converts a score from the 0.0-1.0 scale (from backend) to a 1-5 point scale (for display).
- * 1.0 -> 5
- * 0.5 -> 3
- * 0.0 -> 1
- */
-const convertScoreTo5Point = (score) => {
-    // Formula: (score_0_to_1 * 4) + 1, rounded to nearest integer
-    const convertedScore = Math.round((score * 4) + 1);
-    // Ensure the score stays within the 1-5 boundary
-    return Math.min(5, Math.max(1, convertedScore));
-};
+// Force the background to the actual browser window size
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 export default function RecommendationScreen({ route, navigation }) {
-  // Get the analysis result
-  const { analysisResult } = route.params; 
-  
-  // Use a default structure if the result is somehow missing or malformed
+  const { analysisResult } = route.params || {}; 
   const defaultResult = { workout: "Unknown", reps: 0, avg_score: 0, details: [] };
-  const { workout, reps, avg_score, details } = analysisResult || defaultResult;
+  const { workout, reps, avg_score, details, recommendation } = analysisResult || defaultResult;
   
   const workoutName = workout?.name || workout;
-
-  // --- NEW: Convert the 0.0-1.0 average score to 1-5 ---
-  const score5Point = convertScoreTo5Point(avg_score);
-  
-  let feedbackMessage;
-  let scoreColor;
-
-  if (score5Point === 5) {
-    feedbackMessage = "Exceptional Form! You earned a perfect 5.";
-    scoreColor = "#4CAF50"; // Green
-  } else if (score5Point === 4) {
-    feedbackMessage = "Excellent job! Minor refinements needed for perfection.";
-    scoreColor = "#8BC34A"; // Light Green
-  } else if (score5Point === 3) {
-    feedbackMessage = "Good performance. Focus on key issues for improvement.";
-    scoreColor = "#FFC107"; // Yellow
-  } else if (score5Point === 2) {
-    feedbackMessage = "Needs work. Review the form guide before your next session.";
-    scoreColor = "#FF9800"; // Orange
-  } else {
-    feedbackMessage = "Critical issues detected. Stop and review the technique immediately.";
-    scoreColor = "#F44336"; // Red
-  }
-
-  // Generate a simple list of performance details from the 'details' array
-  const repDetails = (details || []).map((rawScore, index) => {
-    const repScore5Point = convertScoreTo5Point(rawScore);
-    let repColor;
-    if (repScore5Point >= 4) repColor = "#4CAF50";
-    else if (repScore5Point >= 3) repColor = "#FFC107";
-    else repColor = "#F44336";
-
-    return {
-      rep: index + 1,
-      score: repScore5Point, // Store the 1-5 score for display
-      repColor: repColor,
-    };
-  });
+  const score5Point = Math.round(avg_score); 
+  let scoreColor = score5Point >= 4 ? "#4CAF50" : score5Point >= 3 ? "#FFC107" : "#F44336";
 
   return (
-    <ImageBackground
-        source={require("../assets/images/barbell.jpg")}
-        style={styles.background}
-    >
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.card}>
-            <Text style={styles.title}>ANALYSIS COMPLETE</Text>
-            <Text style={styles.subtitle}>Workout: {workoutName}</Text>
+    <View style={styles.outermostWrapper}>
+      {/* 1. THE FIX: ImageBackground now uses absolute window dimensions */}
+      <View style={styles.backgroundContainer}>
+        <ImageBackground
+          source={require("../assets/images/barbell.jpg")}
+          style={{ width: screenWidth, height: screenHeight }}
+          resizeMode="cover"
+        >
+          <View style={styles.darkOverlay} />
+        </ImageBackground>
+      </View>
 
-            {/* Overall Score */}
-            <View style={[styles.scoreCircle, { borderColor: scoreColor }]}>
-                <Text style={[styles.scoreText, {color: scoreColor}]}>{score5Point}/5</Text>
+      <ScrollView 
+        style={styles.fullWidthScroll}
+        contentContainerStyle={styles.centerContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.responsiveCard}>
+          <Text style={styles.title}>ANALYSIS COMPLETE</Text>
+          <Text style={styles.subtitle}>{workoutName}</Text>
+
+          <View style={[styles.scoreCircle, { borderColor: scoreColor }]}>
+            <Text style={[styles.scoreText, {color: scoreColor}]}>{score5Point}/5</Text>
+          </View>
+
+          {/* Added flexWrap so stats stack if the screen is too thin */}
+          <View style={styles.flexStatsRow}>
+            <View style={styles.flexStatBox}>
+              <FontAwesome5 name="check-circle" size={18} color="#00CFFF" />
+              <Text style={styles.statVal}>{reps}</Text>
+              <Text style={styles.statLab}>Reps</Text>
             </View>
-            <Text style={[styles.feedback, { color: scoreColor }]}>{feedbackMessage}</Text>
+            <View style={styles.flexStatBox}>
+              <FontAwesome5 name="star" size={18} color="#00CFFF" />
+              <Text style={styles.statVal}>{score5Point}/5</Text>
+              <Text style={styles.statLab}>Avg Score</Text>
+            </View>
+          </View>
 
-            <View style={styles.statsRow}>
-                <View style={styles.statBox}>
-                    <FontAwesome5 name="check-circle" size={24} color="#00CFFF" />
-                    <Text style={styles.statNumber}>{reps}</Text>
-                    <Text style={styles.statLabel}>Reps Tracked</Text>
+          <Text style={styles.sectionHeader}>Rep Breakdown</Text>
+          <View style={styles.pillWrap}>
+            {(details || []).length > 0 ? (
+              details.map((val, idx) => (
+                <View key={idx} style={styles.miniPill}>
+                  <Text style={styles.pillTxt}>R{idx + 1}: </Text>
+                  <Text style={[styles.pillScore, { color: Math.round(val) >= 4 ? "#4CAF50" : "#F44336" }]}>
+                    {Math.round(val)}
+                  </Text>
                 </View>
-                <View style={styles.statBox}>
-                    <FontAwesome5 name="star" size={24} color="#00CFFF" />
-                    <Text style={styles.statNumber}>{score5Point}/5</Text>
-                    <Text style={styles.statLabel}>Avg Form Score</Text>
-                </View>
-            </View>
+              ))
+            ) : (
+              <Text style={styles.noneText}>No data.</Text>
+            )}
+          </View>
 
-            {/* Rep Breakdown */}
-            <Text style={styles.breakdownTitle}>Rep-by-Rep Breakdown</Text>
-            <View style={styles.repContainer}>
-                {repDetails.length > 0 ? (
-                    repDetails.map((item) => (
-                        <View key={item.rep} style={styles.repPill}>
-                            <Text style={styles.repText}>Rep {item.rep}: </Text>
-                            <Text style={[styles.repScore, { color: item.repColor }]}>{item.score}/5</Text>
-                        </View>
-                    ))
-                ) : (
-                    <Text style={styles.text}>No detailed rep scores recorded.</Text>
-                )}
+          {recommendation && (
+            <View style={styles.aiBox}>
+              <Text style={styles.aiHeader}>AI RECOMMENDATION</Text>
+              <View style={styles.aiRow}>
+                <View style={styles.aiItem}><Text style={styles.aiVal}>{Math.round(recommendation.recommended_weight)}kg</Text><Text style={styles.aiLab}>Load</Text></View>
+                <View style={styles.aiItem}><Text style={styles.aiVal}>{recommendation.recommended_sets}</Text><Text style={styles.aiLab}>Sets</Text></View>
+                <View style={styles.aiItem}><Text style={styles.aiVal}>{recommendation.recommended_reps}</Text><Text style={styles.aiLab}>Reps</Text></View>
+              </View>
             </View>
+          )}
 
-            <TouchableOpacity style={styles.button} onPress={() => navigation.navigate("Home")}>
-                <Text style={styles.buttonText}>Finish Session</Text>
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate("Home")}>
+            <Text style={styles.actionButtonText}>FINISH SESSION</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
-    </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  background: { flex: 1, resizeMode: "cover" },
-  container: { flexGrow: 1, justifyContent: "center", alignItems: "center", paddingVertical: 40, backgroundColor: "rgba(0,0,0,0.7)" },
-  card: {
+  outermostWrapper: { 
+    flex: 1, 
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000',
+  },
+  backgroundContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    zIndex: -1,
+  },
+  darkOverlay: { 
+    ...StyleSheet.absoluteFillObject, 
+    backgroundColor: "rgba(0,0,0,0.88)" 
+  },
+  fullWidthScroll: { 
+    flex: 1, 
+    width: '100%' 
+  },
+  centerContent: { 
+    flexGrow: 1, 
+    justifyContent: "center", 
+    alignItems: "center", 
+    paddingVertical: 40,
+    width: '100%'
+  },
+  responsiveCard: {
     width: "90%",
-    backgroundColor: "rgba(10, 10, 10, 0.95)",
-    borderRadius: 15,
-    padding: 25,
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#00CFFF55",
-    shadowColor: "#00CFFF",
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 15,
-  },
-  title: { fontSize: 28, color: "#00CFFF", fontWeight: "bold", marginBottom: 10, letterSpacing: 1.5 },
-  subtitle: { fontSize: 18, color: "#ddd", marginBottom: 20 },
-  scoreCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 5,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginVertical: 15,
-  },
-  scoreText: {
-    fontSize: 40,
-    fontWeight: 'bold',
-  },
-  feedback: {
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 25,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    marginBottom: 30,
-    paddingHorizontal: 10,
-  },
-  statBox: {
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginTop: 5,
-  },
-  statLabel: {
-    fontSize: 14,
-    color: '#bbb',
-    textTransform: 'uppercase',
-  },
-  breakdownTitle: {
-    fontSize: 20,
-    color: "#00CFFF",
-    fontWeight: "bold",
-    marginTop: 10,
-    marginBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#00CFFF33",
-    paddingBottom: 5,
-    width: '100%',
-    textAlign: 'center',
-  },
-  repContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  repPill: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(50, 50, 50, 0.8)',
+    maxWidth: 380, 
+    // Reduced minWidth slightly to help with the "thin mode" inspect window
+    minWidth: 180, 
+    backgroundColor: "rgba(10, 10, 10, 0.98)",
     borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    margin: 6,
-    alignItems: 'center',
+    padding: 20,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0, 207, 255, 0.15)",
   },
-  repText: {
-    color: '#ddd',
-    fontSize: 16,
+  title: { fontSize: 20, color: "#00CFFF", fontWeight: "bold", letterSpacing: 1 },
+  subtitle: { fontSize: 13, color: "#555", marginBottom: 15 },
+  scoreCircle: {
+    width: 80, height: 80, borderRadius: 40, borderWidth: 3,
+    justifyContent: 'center', alignItems: 'center', marginVertical: 10
   },
-  repScore: {
-    fontWeight: 'bold',
-    fontSize: 16,
+  scoreText: { fontSize: 24, fontWeight: 'bold' },
+  flexStatsRow: { 
+    flexDirection: 'row', 
+    width: '100%', 
+    justifyContent: 'space-around', 
+    marginVertical: 15,
+    flexWrap: 'wrap', // Prevent horizontal push on thin screens
   },
-  button: { 
-    backgroundColor: "#00CFFF", 
-    paddingVertical: 15,
-    paddingHorizontal: 40,
-    borderRadius: 10, 
-    marginTop: 30,
+  flexStatBox: { alignItems: 'center', marginHorizontal: 10 },
+  statVal: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
+  statLab: { fontSize: 9, color: '#444', textTransform: 'uppercase' },
+  sectionHeader: { fontSize: 14, color: "#00CFFF", fontWeight: "bold", marginTop: 10, marginBottom: 8 },
+  pillWrap: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
+  miniPill: { 
+    flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.02)', 
+    borderRadius: 8, padding: 5, margin: 3, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)' 
   },
-  buttonText: { fontWeight: "bold", color: "#000", fontSize: 16 },
-  text: { fontSize: 16, color: "white", marginBottom: 10, textAlign: 'center' },
+  pillTxt: { color: '#444', fontSize: 10 },
+  pillScore: { fontWeight: 'bold', fontSize: 10 },
+  aiBox: { 
+    width: '100%', backgroundColor: 'rgba(0, 207, 255, 0.02)', 
+    padding: 12, borderRadius: 12, marginTop: 20, borderWidth: 1, borderColor: 'rgba(0, 207, 255, 0.1)' 
+  },
+  aiHeader: { fontSize: 9, fontWeight: 'bold', color: '#00CFFF', textAlign: 'center', marginBottom: 10 },
+  aiRow: { flexDirection: 'row', justifyContent: 'space-around', flexWrap: 'wrap' },
+  aiItem: { alignItems: 'center', marginHorizontal: 5 },
+  aiVal: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  aiLab: { color: '#444', fontSize: 8, textTransform: 'uppercase' },
+  actionButton: { 
+    backgroundColor: "#00CFFF", paddingVertical: 14, width: '100%', 
+    borderRadius: 8, marginTop: 25, alignItems: 'center' 
+  },
+  actionButtonText: { fontWeight: "bold", color: "#000", fontSize: 13 },
+  noneText: { color: '#222', fontSize: 11 }
 });

@@ -1,97 +1,118 @@
 import mediapipe as mp
 from .base_analyzer import BaseAnalyzer
-from .utils import calculate_angle # Universal angle calculator
+from .utils import calculate_angle
 
-# Landmark indices for readability (Left side used for analysis)
+L_SHOULDER = mp.solutions.pose.PoseLandmark.LEFT_SHOULDER.value
 L_HIP = mp.solutions.pose.PoseLandmark.LEFT_HIP.value
 L_KNEE = mp.solutions.pose.PoseLandmark.LEFT_KNEE.value
 L_ANKLE = mp.solutions.pose.PoseLandmark.LEFT_ANKLE.value
-L_SHOULDER = mp.solutions.pose.PoseLandmark.LEFT_SHOULDER.value
+L_FOOT_INDEX = mp.solutions.pose.PoseLandmark.LEFT_FOOT_INDEX.value
 
 class SquatAnalyzer(BaseAnalyzer):
     """
-    Analyzes form for the Squat exercise, focusing on knee depth and hip-to-back angle.
-    Inherits MediaPipe setup and state management from BaseAnalyzer.
+    Expert-based Squat analyzer with countdown and readiness.
     """
     def __init__(self):
-        super().__init__()
-        # 'up' means standing/lockout, 'down' means in the deep squat position
+        super().__init__(required_landmarks=[
+            L_SHOULDER, L_HIP, L_KNEE, L_ANKLE, L_FOOT_INDEX
+        ])
         self.stage = "up"
 
-    def analyze_form(self, knee_angle, hip_angle):
-        """Analyze form and return normalized score and issues."""
+    def rate_angle(self, angle, ideal_min, ideal_max, tolerance=20):
+        if ideal_min <= angle <= ideal_max:
+            return 5
+        elif abs(angle - ideal_min) <= tolerance or abs(angle - ideal_max) <= tolerance:
+            return 4
+        elif abs(angle - ideal_min) <= 2 * tolerance or abs(angle - ideal_max) <= 2 * tolerance:
+            return 3
+        elif abs(angle - ideal_min) <= 3 * tolerance or abs(angle - ideal_max) <= 3 * tolerance:
+            return 2
+        else:
+            return 1
+
+    def analyze_form(self, hip_angle, knee_angle, ankle_angle):
         issues = []
-        score = 1.0 # Start perfect
 
-        # --- Depth Check (Knee Angle) ---
-        # Ideal squat depth requires the hip crease to drop below the knee.
-        # This usually means the knee angle is 90 degrees or less.
-        if self.stage == "down" and knee_angle > 100:
-            issues.append("Insufficient Depth: Go lower (Knee angle too open).")
-            score *= 0.85
-            
-        # --- Torso/Hip Angle Check ---
-        # The angle formed by the torso and thigh (Shoulder-Hip-Knee) should not collapse forward.
-        if hip_angle < 120:
-            issues.append("Torso Leaning Forward: Engage core and maintain upright chest.")
-            score *= 0.9
+        hip_score = self.rate_angle(hip_angle, 130, 160)
+        knee_score = self.rate_angle(knee_angle, 100, 140)
+        ankle_score = self.rate_angle(ankle_angle, 80, 110)
 
-        # Safety Check: If the knee is excessively bent (deep squat, knee angle < 60)
-        if knee_angle < 60:
-             issues.append("Very deep squat: Ensure knees track over feet.")
-             score *= 0.95 # Minor penalty
+        if hip_score < 5:
+            if hip_angle < 130:
+                issues.append("Go slightly deeper to engage glutes.")
+            elif hip_angle > 160:
+                issues.append("Excessive torso lean — keep chest upright.")
+        if knee_score < 5:
+            if knee_angle > 140:
+                issues.append("Shallow squat — go deeper.")
+            elif knee_angle < 100:
+                issues.append("Too deep — avoid dropping below parallel.")
+        if ankle_score < 5:
+            if ankle_angle < 80:
+                issues.append("Limited ankle dorsiflexion — heels may lift.")
+            elif ankle_angle > 110:
+                issues.append("Too much dorsiflexion — adjust stance width.")
 
-        return score, issues
+        final_score = round(
+            (hip_score * 5 + knee_score * 5 + ankle_score * 4) / 14, 2
+        )
+
+        if final_score < 2:
+            final_score = 2
+
+        return final_score, issues
 
     def process_frame(self, landmarks):
+
+        # -------------------------------------
+        # 1. Wait until ALL required joints exist
+        # -------------------------------------
+        if not self.ready:
+            if self._all_joints_detected(landmarks):
+                self.ready = True
+            else:
+                return 0, ["Waiting for full body detection..."], None
+
+        # -------------------------------------
+        # 2. 3-second countdown
+        # -------------------------------------
+        if not self.countdown_done:
+            msg = self._handle_start_countdown()
+            return 0, [msg], None
+
+        # -------------------------------------
+        # 3. Normal squat logic
+        # -------------------------------------
         self.form_issues = []
         stage_changed = None
-        current_score = 1.0
 
         try:
-            # 1. Get Coordinates
+            l_shoulder = self.get_landmark_coords(landmarks, L_SHOULDER)
             l_hip = self.get_landmark_coords(landmarks, L_HIP)
             l_knee = self.get_landmark_coords(landmarks, L_KNEE)
             l_ankle = self.get_landmark_coords(landmarks, L_ANKLE)
-            l_shoulder = self.get_landmark_coords(landmarks, L_SHOULDER)
+            l_toe = self.get_landmark_coords(landmarks, L_FOOT_INDEX)
 
-            # 2. Calculate Angles
-            # Knee Angle (Hip-Knee-Ankle) - measures squat depth
-            knee_angle = calculate_angle(l_hip, l_knee, l_ankle)
-            # Hip Angle (Shoulder-Hip-Knee) - measures torso lean
             hip_angle = calculate_angle(l_shoulder, l_hip, l_knee)
-            
-            # 3. Form Scoring
-            current_score, feedback_issues = self.analyze_form(knee_angle, hip_angle)
-            self.form_issues.extend(feedback_issues)
-            
-            # Accumulate the lowest score (worst form) during the current rep
-            self.current_rep_score = min(self.current_rep_score, current_score)
+            knee_angle = calculate_angle(l_hip, l_knee, l_ankle)
+            ankle_angle = calculate_angle(l_knee, l_ankle, l_toe)
 
-            # 4. Rep Counting Logic
-            # UP position: Knee angle near 170-180 (standing)
-            # DOWN position: Knee angle near 90-100 (squat depth)
+            current_score, feedback = self.analyze_form(
+                hip_angle, knee_angle, ankle_angle
+            )
+            self.form_issues.extend(feedback)
 
-            # Transition from UP to DOWN (Start of Eccentric phase/Descent)
             if knee_angle < 140 and self.stage == "up":
                 self.stage = "down"
 
-            # Transition from DOWN to UP (Rep completion/Ascent)
-            # Only count the rep if the knee angle reaches near full extension
             if knee_angle > 170 and self.stage == "down":
                 self.stage = "up"
                 stage_changed = "rep"
-                
-                # Report the lowest score recorded during the entire rep
-                score_to_report = self.current_rep_score 
-                self.current_rep_score = 1.0 # Reset for next rep
-
-                return score_to_report, self.form_issues, stage_changed
+                return current_score, self.form_issues, stage_changed
 
         except IndexError:
-            self.form_issues.append("Not all required body parts are visible (Hip, Knee, Ankle, Shoulder).")
+            self.form_issues.append("Not all landmarks visible (shoulder–toe).")
         except Exception as e:
             self.form_issues.append(f"Analysis error: {str(e)}")
 
-        # Return current progress if no rep was completed
         return self.current_rep_score, self.form_issues, stage_changed
