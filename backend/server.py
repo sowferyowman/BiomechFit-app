@@ -4,15 +4,18 @@ import numpy as np
 import cv2
 import mediapipe as mp
 import pickle
-import tkinter as tk 
+import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
 
 # --- 1. SETUP & MODEL LOADING ---
 try:
-    with open("xgb_RecommendedReps.pkl", "rb") as f:
+    with open(BASE_DIR / "xgb_RecommendedReps.pkl", "rb") as f:
         model_reps = pickle.load(f)
-    with open("xgb_RecommendedSets.pkl", "rb") as f:
+    with open(BASE_DIR / "xgb_RecommendedSets.pkl", "rb") as f:
         model_sets = pickle.load(f)
-    with open("xgb_RecommendedWeightLoad_kg.pkl", "rb") as f:
+    with open(BASE_DIR / "xgb_RecommendedWeightLoad_kg.pkl", "rb") as f:
         model_weight = pickle.load(f)
     print("AI Models loaded successfully.")
 except Exception as e:
@@ -36,14 +39,24 @@ from exercises.bench_press import BenchPressAnalyzer
 from exercises.overhead_press import OverheadPressAnalyzer
 from exercises.squat import SquatAnalyzer
 
-# Get Screen Resolution for perfect desktop coverage
-root = tk.Tk()
-SCREEN_W = root.winfo_screenwidth()
-SCREEN_H = root.winfo_screenheight()
-root.destroy()
+def get_screen_resolution():
+    """Return the desktop size only when the local camera workflow runs."""
+    import tkinter as tk
+
+    root = tk.Tk()
+    width, height = root.winfo_screenwidth(), root.winfo_screenheight()
+    root.destroy()
+    return width, height
 
 @app.route("/analyze", methods=["POST"])
+@app.route("/api/analyze", methods=["POST"])
 def analyze():
+    if os.getenv("VERCEL"):
+        return jsonify({
+            "error": "Live camera analysis requires a local machine. "
+                     "Vercel Functions cannot access a webcam or open desktop windows."
+        }), 501
+
     data = request.json
     workout = data.get("workout", "Squat")
     user = data.get("user", {})
@@ -69,6 +82,7 @@ def analyze():
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
     # Window configuration to cover side gaps but keep title bar
+    SCREEN_W, SCREEN_H = get_screen_resolution()
     window_name = "BIOMECHFIT_ULTRA_v3.0"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL) 
     cv2.resizeWindow(window_name, SCREEN_W, SCREEN_H - 100) 
