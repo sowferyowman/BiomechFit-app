@@ -1,16 +1,11 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "functions": {
     "backend/server.py": {
       "excludeFiles": "biomechfit-env/**"
     }
   },
-  "builds": [
-    {
-      "src": "backend/server.py",
-      "use": "@vercel/python"
-    }
-  ],
   "routes": [
     { "src": "/api/(.*)", "dest": "backend/server.py" }
   ]

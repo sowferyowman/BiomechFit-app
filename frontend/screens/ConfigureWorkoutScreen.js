@@ -118,7 +118,7 @@ export default function ConfigureWorkoutScreen({ route, navigation }) {
 
     setIsLoading(true);
     try {
-      const res = await axios.post("http://172.16.12.42:5000/analyze", {
+      const res = await axios.post("http://192.168.1.18:5000/analyze", {
         workout: workout.name,
         user: { age, sex, height, weight, load, sets, reps },
       });
