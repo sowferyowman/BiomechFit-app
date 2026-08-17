@@ -1,28 +1,6 @@
-BiomechFit is a cross-platform fitness app that analyzes exercise form, counts reps, and recommends sets, reps, and weights.  
-It uses Mediapipe for pose detection, XGBoost for machine learning predictions, and a React Native frontend for the mobile interface.
+# BiomechFit
 
-## Features
-- Real-time form tracking with Mediapipe Pose
-- Rep counting and form scoring
-- Personalized training recommendations using XGBoost
-- Mobile UI built with React Native (Expo)
-- Backend powered by FastAPI
+BiomechFit is a fitness-form analysis application developed as an Expo React Native application with a Python Flask analysis service. The mobile and web interface guides users through workout selection and workout configuration, while the local Python service uses MediaPipe pose detection, OpenCV, and XGBoost models to analyze exercise form, count repetitions, calculate form scores, and generate training recommendations.
 
-### Frontend (Mobile App)
-- React Native (Expo)
-- JavaScript / TypeScript
-- Axios (for API calls to backend)
+The application is designed to support a more guided and data-informed training experience. Instead of relying only on manual observation, users can select an exercise, provide workout details such as age, height, weight, sets, repetitions, and load, then use the camera-based analysis workflow to receive form feedback and recommended sets, repetitions, and weight.
 
-### Backend (Machine Learning + API)
-- Python 3.10
-- Mediapipe
-- OpenCV
-- NumPy
-- Pandas
-- XGBoost
-- FastAPI
-- Uvicorn (server)
-
-python server.py
-cd frontend
-npx expo start
