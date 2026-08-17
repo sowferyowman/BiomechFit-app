@@ -1,9 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "version": 2,
-  "functions": {
-    "api/analyze.py": {
-      "excludeFiles": "biomechfit-env/**"
-    }
-  }
+  "framework": null,
+  "installCommand": "npm ci --prefix frontend",
+  "buildCommand": "cd frontend && npx expo export --platform web",
+  "outputDirectory": "frontend/dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
